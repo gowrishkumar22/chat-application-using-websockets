@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat - ChatFlow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e293b 100%);
+        }
+        .glass-effect {
+            backdrop-filter: blur(16px);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .message-sent {
+            background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
+        }
+        .message-received {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        .chat-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .chat-scroll::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .chat-scroll::-webkit-scrollbar-thumb {
+            background: rgba(139, 92, 246, 0.5);
+            border-radius: 2px;
+        }
+        .typing-animation {
+            animation: typing 1.5s infinite;
+        }
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+        .voice-recording {
+            animation: pulse 1s infinite;
+        }
+        .emoji-picker {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .file-drop-zone {
+            border: 2px dashed rgba(139, 92, 246, 0.5);
+            transition: all 0.3s ease;
+        }
+        .file-drop-zone.dragover {
+            border-color: #8b5cf6;
+            background: rgba(139, 92, 246, 0.1);
+        }
+        .modal {
+            backdrop-filter: blur(10px);
+            background: rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="w-80 glass-effect border-r border-purple-500/20 flex flex-col">
+            <!-- Back Button -->
+            <div class="p-4 border-b border-purple-500/20">
+                <button onclick="goBack()" class="flex items-center space-x-2 text-purple-300 hover:text-white transition duration-300">
+                    <i class="fas fa-arrow-left"></i>
+                    <span>Back to Chats</span>
+                </button>
+            </div>
+
+            <!-- Chat Info -->
+            <div class="p-6 border-b border-purple-500/20">
+                <div class="text-center">
+                    <div class="w-20 h-20 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mx-auto mb-4 flex items-center justify-center">
+                        <span class="text-white font-bold text-2xl">{{ other_user.name[0].upper() if other_user else 'U' }}</span>
+                    </div>
+                    <h2 class="text-white font-bold text-xl">{{ other_user.name if other_user else 'Unknown User' }}</h2>
+                    <p class="text-green-400 text-sm flex items-center justify-center space-x-1">
+                        <div class="w-2 h-2 bg-green-400 rounded-full"></div>
+                        <span>Online</span>
+                    </p>
+                    <div class="flex justify-center space-x-4 mt-4">
+                        <button class="glass-effect p-3 rounded-full hover:bg-white/10 transition duration-300">
+                            <i class="fas fa-info-circle text-white"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Media & Files -->
+            <div class="flex-1 p-4">
+                <h3 class="text-white font-semibold mb-4">Shared Media</h3>
+                {% if shared_media %}
+                    <div class="grid grid-cols-3 gap-2 mb-6">
+                        {% for media in shared_media[:6] %}
+                            <div class="aspect-square bg-gray-700 rounded-lg overflow-hidden">
+                                {% if media.message_type == 'image' %}
+                                    <img src="{{ url_for('uploaded_file', filename=media.file_name) }}"
+                                         alt="{{ media.original_name }}"
+                                         class="w-full h-full object-cover cursor-pointer"
+                                         onclick="openImageModal('{{ url_for('uploaded_file', filename=media.file_name) }}', '{{ media.original_name }}')">
+                                {% elif media.message_type == 'video' %}
+                                    <div class="w-full h-full bg-gray-800 flex items-center justify-center cursor-pointer"
+                                         onclick="openVideoModal('{{ url_for('uploaded_file', filename=media.file_name) }}', '{{ media.original_name }}')">
+                                        <i class="fas fa-play text-white text-xl"></i>
+                                    </div>
+                                {% elif media.message_type == 'audio' %}
+                                    <div class="w-full h-full bg-purple-600 flex items-center justify-center cursor-pointer"
+                                         onclick="playAudio('{{ url_for('uploaded_file', filename=media.file_name) }}')">
+                                        <i class="fas fa-music text-white text-xl"></i>
+                                    </div>
+                                {% else %}
+                                    <div class="w-full h-full bg-blue-600 flex items-center justify-center cursor-pointer"
+                                         onclick="downloadFile('{{ url_for('uploaded_file', filename=media.file_name) }}', '{{ media.original_name }}')">
+                                        <i class="fas fa-file text-white text-xl"></i>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                        {% if shared_media|length > 6 %}
+                            <div class="aspect-square bg-gray-700 rounded-lg flex items-center justify-center cursor-pointer"
+                                 onclick="showAllMedia()">
+                                <span class="text-white text-sm">+{{ shared_media|length - 6 }}</span>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-4 mb-6">
+                        <i class="fas fa-images text-gray-400 text-2xl mb-2"></i>
+                        <p class="text-gray-400 text-sm">No media shared yet</p>
+                    </div>
+                {% endif %}
+
+                <h4 class="text-white font-semibold mb-2">Recent Files</h4>
+                <div class="space-y-2">
+                    {% if shared_media %}
+                        {% for file in shared_media[:5] %}
+                            {% if file.message_type in ['document', 'file', 'spreadsheet', 'presentation'] %}
+                                <div class="glass-effect p-3 rounded-lg flex items-center space-x-3 cursor-pointer hover:bg-white/5 transition duration-300"
+                                     onclick="downloadFile('{{ url_for('uploaded_file', filename=file.file_name) }}', '{{ file.original_name }}')">
+                                    <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                                        {% if file.original_name.endswith('.pdf') %}
+                                            <i class="fas fa-file-pdf text-white text-sm"></i>
+                                        {% elif file.original_name.endswith(('.doc', '.docx')) %}
+                                            <i class="fas fa-file-word text-white text-sm"></i>
+                                        {% elif file.original_name.endswith(('.xls', '.xlsx')) %}
+                                            <i class="fas fa-file-excel text-white text-sm"></i>
+                                        {% elif file.original_name.endswith(('.ppt', '.pptx')) %}
+                                            <i class="fas fa-file-powerpoint text-white text-sm"></i>
+                                        {% else %}
+                                            <i class="fas fa-file text-white text-sm"></i>
+                                        {% endif %}
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-white text-sm truncate">{{ file.original_name }}</p>
+                                        <p class="text-gray-400 text-xs">{{ ((file.file_size or 0) / 1024 / 1024) | round(2) }} MB</p>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-folder-open text-gray-400 text-xl mb-2"></i>
+                            <p class="text-gray-400 text-sm">No files shared yet</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Area -->
+        <div class="flex-1 flex flex-col">
+            <!-- Chat Header -->
+            <div class="glass-effect p-4 border-b border-purple-500/20 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                        <span class="text-white font-semibold text-sm">{{ other_user.name[0].upper() if other_user else 'U' }}</span>
+                    </div>
+                    <div>
+                        <h3 class="text-white font-semibold">{{ other_user.name if other_user else 'Unknown User' }}</h3>
+                        <p class="text-gray-300 text-sm">Online</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button class="text-gray-300 hover:text-white p-2 transition duration-300">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <button class="text-gray-300 hover:text-white p-2 transition duration-300">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Messages -->
+            <div class="flex-1 overflow-y-auto chat-scroll p-4 space-y-4" id="messagesContainer">
+                {% if messages %}
+                    {% for message in messages %}
+                        {% if message.sender.id == user.user_id %}
+                            <!-- Sent Message -->
+                            <div class="flex items-start space-x-3 justify-end">
+                                <div class="max-w-xs lg:max-w-md group" data-message-id="{{ message.id }}">
+                                    {% if message.message_type == 'text' %}
+                                        <div class="message-sent rounded-2xl rounded-tr-md p-3 relative">
+                                            <p class="text-white">{{ message.content }}</p>
+                                            <button onclick="confirmDeleteMessage('{{ message.id }}')" 
+                                                    class="absolute -right-2 -top-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <i class="fas fa-times text-xs"></i>
+                                            </button>
+                                        </div>
+                                    {% elif message.message_type == 'image' %}
+                                        <div class="message-sent rounded-2xl rounded-tr-md p-1 relative">
+                                            <img src="{{ url_for('uploaded_file', filename=message.file_name) }}"
+                                                 alt="{{ message.original_name }}"
+                                                 class="w-full max-w-xs rounded-xl object-cover cursor-pointer"
+                                                 onclick="openImageModal('{{ url_for('uploaded_file', filename=message.file_name) }}', '{{ message.original_name }}')">
+                                            <button onclick="confirmDeleteMessage('{{ message.id }}')" 
+                                                    class="absolute -right-2 -top-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <i class="fas fa-times text-xs"></i>
+                                            </button>
+                                        </div>
+                                    {% elif message.message_type == 'video' %}
+                                        <div class="message-sent rounded-2xl rounded-tr-md p-1 relative">
+                                            <video controls class="w-full max-w-xs rounded-xl">
+                                                <source src="{{ url_for('uploaded_file', filename=message.file_name) }}" type="video/mp4">
+                                                Your browser does not support the video tag.
+                                            </video>
+                                            <button onclick="confirmDeleteMessage('{{ message.id }}')" 
+                                                    class="absolute -right-2 -top-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <i class="fas fa-times text-xs"></i>
+                                            </button>
+                                        </div>
+                                    {% elif message.message_type == 'audio' %}
+                                        <div class="message-sent rounded-2xl rounded-tr-md p-3 flex items-center space-x-3 relative">
+                                            <button onclick="toggleAudio('{{ message.id }}')" class="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center hover:bg-purple-700 transition duration-300">
+                                                <i class="fas fa-play text-white text-sm" id="play-icon-{{ message.id }}"></i>
+                                            </button>
+                                            <div class="flex-1">
+                                                <div class="flex items-center space-x-2">
+                                                    <div class="flex-1 h-1 bg-gray-600 rounded-full">
+                                                        <div class="w-0 h-full bg-purple-500 rounded-full" id="progress-{{ message.id }}"></div>
+                                                    </div>
+                                                    <span class="text-gray-300 text-xs" id="duration-{{ message.id }}">0:00</span>
+                                                </div>
+                                                <audio id="audio-{{ message.id }}" preload="metadata">
+                                                    <source src="{{ url_for('uploaded_file', filename=message.file_name) }}" type="audio/mpeg">
+                                                </audio>
+                                            </div>
+                                            <button onclick="confirmDeleteMessage('{{ message.id }}')" 
+                                                    class="absolute -right-2 -top-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <i class="fas fa-times text-xs"></i>
+                                            </button>
+                                        </div>
+                                    {% else %}
+                                        <div class="message-sent rounded-2xl rounded-tr-md p-3 relative">
+                                            <div class="flex items-center space-x-3">
+                                                <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                                                    <i class="fas fa-file text-white text-sm"></i>
+                                                </div>
+                                                <div class="flex-1 min-w-0">
+                                                    <p class="text-white text-sm truncate">{{ message.original_name }}</p>
+                                                    <p class="text-purple-200 text-xs">{{ ((message.file_size or 0) / 1024 / 1024) | round(2) }} MB</p>
+                                                </div>
+                                                <a href="{{ url_for('uploaded_file', filename=message.file_name) }}" download="{{ message.original_name }}" class="text-white hover:text-purple-200">
+                                                    <i class="fas fa-download"></i>
+                                                </a>
+                                            </div>
+                                            <button onclick="confirmDeleteMessage('{{ message.id }}')" 
+                                                    class="absolute -right-2 -top-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <i class="fas fa-times text-xs"></i>
+                                            </button>
+                                        </div>
+                                    {% endif %}
+                                    <p class="text-gray-400 text-xs mt-1 mr-3 text-right">
+                                        {{ message.timestamp.strftime('%I:%M %p') if message.timestamp else 'now' }} ✓✓
+                                    </p>
+                                </div>
+                            </div>
+                        {% else %}
+                            <!-- Received Message -->
+                            <div class="flex items-start space-x-3">
+                                <div class="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                                    <span class="text-white font-semibold text-xs">{{ message.sender.name[0].upper() }}</span>
+                                </div>
+                                <div class="max-w-xs lg:max-w-md">
+                                    {% if message.message_type == 'text' %}
+                                        <div class="message-received rounded-2xl rounded-tl-md p-3">
+                                            <p class="text-white">{{ message.content }}</p>
+                                        </div>
+                                    {% elif message.message_type == 'image' %}
+                                        <div class="message-received rounded-2xl rounded-tl-md p-1">
+                                            <img src="{{ url_for('uploaded_file', filename=message.file_name) }}"
+                                                 alt="{{ message.original_name }}"
+                                                 class="w-full max-w-xs rounded-xl object-cover cursor-pointer"
+                                                 onclick="openImageModal('{{ url_for('uploaded_file', filename=message.file_name) }}', '{{ message.original_name }}')">
+                                        </div>
+                                    {% elif message.message_type == 'video' %}
+                                        <div class="message-received rounded-2xl rounded-tl-md p-1">
+                                            <video controls class="w-full max-w-xs rounded-xl">
+                                                <source src="{{ url_for('uploaded_file', filename=message.file_name) }}" type="video/mp4">
+                                                Your browser does not support the video tag.
+                                            </video>
+                                        </div>
+                                    {% elif message.message_type == 'audio' %}
+                                        <div class="message-received rounded-2xl rounded-tl-md p-3 flex items-center space-x-3">
+                                            <button onclick="toggleAudio('{{ message.id }}')" class="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center hover:bg-purple-700 transition duration-300">
+                                                <i class="fas fa-play text-white text-sm" id="play-icon-{{ message.id }}"></i>
+                                            </button>
+                                            <div class="flex-1">
+                                                <div class="flex items-center space-x-2">
+                                                    <div class="flex-1 h-1 bg-gray-600 rounded-full">
+                                                        <div class="w-0 h-full bg-purple-500 rounded-full" id="progress-{{ message.id }}"></div>
+                                                    </div>
+                                                    <span class="text-gray-300 text-xs" id="duration-{{ message.id }}">0:00</span>
+                                                </div>
+                                                <audio id="audio-{{ message.id }}" preload="metadata">
+                                                    <source src="{{ url_for('uploaded_file', filename=message.file_name) }}" type="audio/mpeg">
+                                                </audio>
+                                            </div>
+                                        </div>
+                                    {% else %}
+                                        <!-- File Message -->
+                                        <div class="message-received rounded-2xl rounded-tl-md p-3">
+                                            <div class="flex items-center space-x-3">
+                                                <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                                                    <i class="fas fa-file text-white text-sm"></i>
+                                                </div>
+                                                <div class="flex-1 min-w-0">
+                                                    <p class="text-white text-sm truncate">{{ message.original_name }}</p>
+                                                    <p class="text-purple-200 text-xs">{{ ((message.file_size or 0) / 1024 / 1024) | round(2) }} MB</p>
+                                                </div>
+                                                <a href="{{ url_for('uploaded_file', filename=message.file_name) }}" download="{{ message.original_name }}" class="text-white hover:text-purple-200">
+                                                    <i class="fas fa-download"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                    <p class="text-gray-400 text-xs mt-1 ml-3">
+                                        {{ message.timestamp.strftime('%I:%M %p') if message.timestamp else 'now' }}
+                                    </p>
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center py-8">
+                        <div class="w-16 h-16 bg-purple-600/20 rounded-full mx-auto mb-4 flex items-center justify-center">
+                            <i class="fas fa-comments text-purple-400 text-2xl"></i>
+                        </div>
+                        <h3 class="text-white font-semibold mb-2">No messages yet</h3>
+                        <p class="text-gray-400 text-sm">Start the conversation by sending a message below</p>
+                    </div>
+                {% endif %}
+
+                <!-- Typing Indicator -->
+                <div class="flex items-start space-x-3" id="typingIndicator" style="display: none;">
+                    <div class="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                        <span class="text-white font-semibold text-xs">{{ other_user.name[0].upper() if other_user else 'U' }}</span>
+                    </div>
+                    <div class="max-w-xs lg:max-w-md">
+                        <div class="message-received rounded-2xl rounded-tl-md p-3">
+                            <div class="flex space-x-1">
+                                <div class="w-2 h-2 bg-gray-400 rounded-full typing-animation" style="animation-delay: 0s;"></div>
+                                <div class="w-2 h-2 bg-gray-400 rounded-full typing-animation" style="animation-delay: 0.2s;"></div>
+                                <div class="w-2 h-2 bg-gray-400 rounded-full typing-animation" style="animation-delay: 0.4s;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Message Input -->
+            <div class="glass-effect p-4 border-t border-purple-500/20">
+                <div class="flex items-end space-x-3">
+                    <!-- Image Upload Button -->
+                    <button onclick="selectImage()" class="text-gray-400 hover:text-white p-2 transition duration-300">
+                        <i class="fas fa-image"></i>
+                    </button>
+
+                    <!-- Message Input -->
+                    <div class="flex-1 relative">
+                        <textarea id="messageInput"
+                                  placeholder="Type a message..."
+                                  class="w-full bg-white/10 text-white placeholder-gray-400 rounded-2xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 max-h-32"
+                                  rows="1"></textarea>
+
+                        <!-- Emoji Button -->
+                        <button onclick="toggleEmojiPicker()" class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition duration-300">
+                            <i class="fas fa-smile"></i>
+                        </button>
+
+                        <!-- Emoji Picker -->
+                        <div id="emojiPicker" class="absolute bottom-full right-0 mb-2 glass-effect rounded-lg p-3 w-64 hidden emoji-picker">
+                            <div class="grid grid-cols-8 gap-2">
+                                <button onclick="insertEmoji('😀')" class="p-2 hover:bg-white/10 rounded text-lg">😀</button>
+                                <button onclick="insertEmoji('😍')" class="p-2 hover:bg-white/10 rounded text-lg">😍</button>
+                                <button onclick="insertEmoji('🤔')" class="p-2 hover:bg-white/10 rounded text-lg">🤔</button>
+                                <button onclick="insertEmoji('👍')" class="p-2 hover:bg-white/10 rounded text-lg">👍</button>
+                                <button onclick="insertEmoji('❤️')" class="p-2 hover:bg-white/10 rounded text-lg">❤️</button>
+                                <button onclick="insertEmoji('🎉')" class="p-2 hover:bg-white/10 rounded text-lg">🎉</button>
+                                <button onclick="insertEmoji('🔥')" class="p-2 hover:bg-white/10 rounded text-lg">🔥</button>
+                                <button onclick="insertEmoji('💯')" class="p-2 hover:bg-white/10 rounded text-lg">💯</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Voice Record Button -->
+                    <button id="voiceButton"
+                            onclick="toggleVoiceRecording()"
+                            class="text-gray-400 hover:text-white p-2 transition duration-300">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+
+                    <!-- Send Button -->
+                    <button onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-full transition duration-300">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+
+                <!-- Voice Recording Indicator -->
+                <div id="voiceRecording" class="hidden mt-3 flex items-center space-x-3 text-red-400">
+                    <div class="w-3 h-3 bg-red-500 rounded-full voice-recording"></div>
+                    <span class="text-sm">Recording... Click mic again to send</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden image input -->
+    <input type="file" id="hiddenImageInput" style="display: none;" accept="image/*" multiple>
+
+    <script>
+        let isRecording = false;
+        let attachmentMenuOpen = false;
+        let emojiPickerOpen = false;
+
+        // Auto-resize textarea
+        const messageInput = document.getElementById('messageInput');
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = this.scrollHeight + 'px';
+        });
+
+        // Send message on Enter
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        function goBack() {
+            window.location.href = '{{ url_for("home") }}';
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+
+            if (message) {
+                // Clear input immediately for better UX
+                input.value = '';
+                input.style.height = 'auto';
+
+                // Send message to server
+                fetch('{{ url_for("send_message") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        conversation_id: '{{ conversation_id }}',
+                        content: message
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Add message to UI
+                        addMessageToUI(data.message, true);
+                    } else {
+                        console.error('Failed to send message:', data.error);
+                        // Restore message to input on failure
+                        input.value = message;
+                        alert('Failed to send message. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error sending message:', error);
+                    // Restore message to input on failure
+                    input.value = message;
+                    alert('Error sending message. Please try again.');
+                });
+            }
+        }
+
+        function addMessageToUI(message, isSent) {
+            const messagesContainer = document.getElementById('messagesContainer');
+            const messageDiv = document.createElement('div');
+
+            const alignmentClass = isSent ? 'justify-end' : '';
+            const messageClass = isSent ? 'message-sent rounded-tr-md' : 'message-received rounded-tl-md';
+            const timeClass = isSent ? 'mr-3 text-right' : 'ml-3';
+
+            messageDiv.className = `flex items-start space-x-3 ${alignmentClass}`;
+            messageDiv.setAttribute('data-message-id', message.id);
+
+            const deleteButton = isSent ? `
+                <button onclick="confirmDeleteMessage('${message.id}')" 
+                        class="absolute -right-2 -top-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <i class="fas fa-times text-xs"></i>
+                </button>
+            ` : '';
+
+            let messageContent = '';
+
+            if (message.message_type === 'image') {
+                messageContent = `
+                    <div class="${messageClass} rounded-2xl p-1 relative">
+                        <img src="/uploads/${message.file_name}"
+                             alt="${message.original_name}"
+                             class="w-full max-w-xs rounded-xl object-cover cursor-pointer"
+                             onclick="openImageModal('/uploads/${message.file_name}', '${message.original_name}')">
+                        ${deleteButton}
+                    </div>
+                `;
+            } else if (message.message_type === 'video') {
+                messageContent = `
+                    <div class="${messageClass} rounded-2xl p-1 relative">
+                        <video controls class="w-full max-w-xs rounded-xl">
+                            <source src="/uploads/${message.file_name}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        ${deleteButton}
+                    </div>
+                `;
+            } else if (message.message_type === 'audio') {
+                messageContent = `
+                    <div class="${messageClass} rounded-2xl p-3 flex items-center space-x-3 relative">
+                        <button onclick="toggleAudio('${message.id}')" class="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center hover:bg-purple-700 transition duration-300">
+                            <i class="fas fa-play text-white text-sm" id="play-icon-${message.id}"></i>
+                        </button>
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2">
+                                <div class="flex-1 h-1 bg-gray-600 rounded-full">
+                                    <div class="w-0 h-full bg-purple-500 rounded-full" id="progress-${message.id}"></div>
+                                </div>
+                                <span class="text-gray-300 text-xs" id="duration-${message.id}">0:00</span>
+                            </div>
+                            <audio id="audio-${message.id}" preload="metadata">
+                                <source src="/uploads/${message.file_name}" type="audio/mpeg">
+                            </audio>
+                        </div>
+                        ${deleteButton}
+                    </div>
+                `;
+            } else if (message.message_type === 'file') {
+                messageContent = `
+                    <div class="${messageClass} rounded-2xl p-3 relative">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-file text-white text-sm"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-white text-sm truncate">${message.original_name}</p>
+                                <p class="text-purple-200 text-xs">${(message.file_size / 1024 / 1024).toFixed(2)} MB</p>
+                            </div>
+                            <a href="/uploads/${message.file_name}" download="${message.original_name}" class="text-white hover:text-purple-200">
+                                <i class="fas fa-download"></i>
+                            </a>
+                        </div>
+                        ${deleteButton}
+                    </div>
+                `;
+            } else {
+                messageContent = `
+                    <div class="${messageClass} rounded-2xl p-3 relative">
+                        <p class="text-white">${escapeHtml(message.content)}</p>
+                        ${deleteButton}
+                    </div>
+                `;
+            }
+
+            if (!isSent) {
+                messageDiv.innerHTML = `
+                    <div class="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                        <span class="text-white font-semibold text-xs">${message.sender.name[0].toUpperCase()}</span>
+                    </div>
+                    <div class="max-w-xs lg:max-w-md">
+                        ${messageContent}
+                        <p class="text-gray-400 text-xs mt-1 ${timeClass}">${formatTime(new Date())}</p>
+                    </div>
+                `;
+            } else {
+                messageDiv.innerHTML = `
+                    <div class="max-w-xs lg:max-w-md">
+                        ${messageContent}
+                        <p class="text-gray-400 text-xs mt-1 ${timeClass}">${formatTime(new Date())} ✓</p>
+                    </div>
+                `;
+            }
+
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatTime(date) {
+            return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        }
+
+        function showTypingIndicator() {
+            document.getElementById('typingIndicator').style.display = 'flex';
+            const messagesContainer = document.getElementById('messagesContainer');
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            // Hide after 3 seconds
+            setTimeout(() => {
+                document.getElementById('typingIndicator').style.display = 'none';
+            }, 3000);
+        }
+
+        function toggleAttachmentMenu() {
+            attachmentMenuOpen = !attachmentMenuOpen;
+            const menu = document.getElementById('attachmentMenu');
+            menu.classList.toggle('hidden', !attachmentMenuOpen);
+        }
+
+        function toggleEmojiPicker() {
+            emojiPickerOpen = !emojiPickerOpen;
+            const picker = document.getElementById('emojiPicker');
+            picker.classList.toggle('hidden', !emojiPickerOpen);
+        }
+
+        function insertEmoji(emoji) {
+            const input = document.getElementById('messageInput');
+            input.value += emoji;
+            input.focus();
+            toggleEmojiPicker();
+        }        function selectImage() {
+            document.getElementById('hiddenImageInput').click();
+        }
+
+        // Toggle voice recording function
+        function toggleVoiceRecording() {
+            if (!isRecording) {
+                startVoiceRecording();
+            } else {
+                stopVoiceRecording();
+            }
+        }
+
+        function closeFileModal() {
+            document.getElementById('fileUploadModal').classList.add('hidden');
+        }        // Image input handler
+        document.getElementById('hiddenImageInput').addEventListener('change', function(e) {
+            handleImageUpload(e.target.files);
+        });
+
+        function handleImageUpload(files) {
+            if (files.length > 0) {
+                Array.from(files).forEach(file => {
+                    if (file.type.startsWith('image/')) {
+                        uploadImage(file);
+                    } else {
+                        console.warn('Skipping non-image file:', file.name);
+                    }
+                });
+            }
+        }
+
+        function uploadImage(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('conversation_id', '{{ conversation_id }}');
+
+            // Show uploading indicator
+            const messagesContainer = document.getElementById('messagesContainer');
+            const uploadingDiv = document.createElement('div');
+            uploadingDiv.className = 'flex items-start space-x-3 justify-end uploading-message';
+            uploadingDiv.innerHTML = `
+                <div class="max-w-xs lg:max-w-md">
+                    <div class="message-sent rounded-2xl rounded-tr-md p-3">
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-spinner fa-spin text-white"></i>
+                            <span class="text-white text-sm">Uploading ${file.name}...</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            messagesContainer.appendChild(uploadingDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            fetch('{{ url_for("upload_file") }}', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove uploading indicator
+                uploadingDiv.remove();
+
+                if (data.success) {
+                    addFileMessageToUI(data.message, true);
+                } else {
+                    console.error('Failed to upload file:', data.error);
+                    alert('Failed to upload file: ' + data.error);
+                }
+            })
+            .catch(error => {
+                // Remove uploading indicator
+                uploadingDiv.remove();
+                console.error('Error uploading file:', error);
+                alert('Error uploading file. Please try again.');
+            });
+        }
+
+        function addFileMessageToUI(message, isSent) {
+            const messagesContainer = document.getElementById('messagesContainer');
+            const messageDiv = document.createElement('div');
+
+            const alignmentClass = isSent ? 'justify-end' : '';
+            const messageClass = isSent ? 'message-sent rounded-tr-md' : 'message-received rounded-tl-md';
+            const timeClass = isSent ? 'mr-3 text-right' : 'ml-3';
+
+            messageDiv.className = `flex items-start space-x-3 ${alignmentClass}`;
+            messageDiv.setAttribute('data-message-id', message.id);
+
+            let messageContent = '';
+
+            if (message.message_type === 'image') {
+                messageContent = `
+                    <div class="${messageClass} rounded-2xl p-1">
+                        <img src="/uploads/${message.file_name}"
+                             alt="${message.original_name}"
+                             class="w-full max-w-xs rounded-xl object-cover cursor-pointer"
+                             onclick="openImageModal('/uploads/${message.file_name}', '${message.original_name}')">
+                    </div>
+                `;
+            } else if (message.message_type === 'video') {
+                messageContent = `
+                    <div class="${messageClass} rounded-2xl p-1">
+                        <video controls class="w-full max-w-xs rounded-xl">
+                            <source src="/uploads/${message.file_name}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                    </div>
+                `;
+            } else if (message.message_type === 'audio') {
+                messageContent = `
+                    <div class="${messageClass} rounded-2xl p-3 flex items-center space-x-3">
+                        <button onclick="toggleAudio('${message.id}')" class="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center hover:bg-purple-700 transition duration-300">
+                            <i class="fas fa-play text-white text-sm" id="play-icon-${message.id}"></i>
+                        </button>
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2">
+                                <div class="flex-1 h-1 bg-gray-600 rounded-full">
+                                    <div class="w-0 h-full bg-purple-500 rounded-full" id="progress-${message.id}"></div>
+                                </div>
+                                <span class="text-gray-300 text-xs" id="duration-${message.id}">0:00</span>
+                            </div>
+                            <audio id="audio-${message.id}" preload="metadata">
+                                <source src="/uploads/${message.file_name}" type="audio/mpeg">
+                            </audio>
+                        </div>
+                    </div>
+                `;
+            } else {
+                messageContent = `
+                    <div class="${messageClass} rounded-2xl p-3">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-file text-white text-sm"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-white text-sm truncate">${message.original_name}</p>
+                                <p class="text-purple-200 text-xs">${(message.file_size / 1024 / 1024).toFixed(2)} MB</p>
+                            </div>
+                            <a href="/uploads/${message.file_name}" download="${message.original_name}" class="text-white hover:text-purple-200">
+                                <i class="fas fa-download"></i>
+                            </a>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (!isSent) {
+                messageDiv.innerHTML = `
+                    <div class="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                        <span class="text-white font-semibold text-xs">${message.sender.name[0].toUpperCase()}</span>
+                    </div>
+                    <div class="max-w-xs lg:max-w-md">
+                        ${messageContent}
+                        <p class="text-gray-400 text-xs mt-1 ${timeClass}">${formatTime(new Date())}</p>
+                    </div>
+                `;
+            } else {
+                messageDiv.innerHTML = `
+                    <div class="max-w-xs lg:max-w-md">
+                        ${messageContent}
+                        <p class="text-gray-400 text-xs mt-1 ${timeClass}">${formatTime(new Date())} ✓</p>
+                    </div>
+                `;
+            }
+
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }        // Close dropdowns when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('#attachmentMenu') && !e.target.closest('button[onclick="toggleAttachmentMenu()"]')) {
+                attachmentMenuOpen = false;
+                document.getElementById('attachmentMenu').classList.add('hidden');
+            }
+
+            if (!e.target.closest('#emojiPicker') && !e.target.closest('button[onclick="toggleEmojiPicker()"]')) {
+                emojiPickerOpen = false;
+                document.getElementById('emojiPicker').classList.add('hidden');
+            }
+        });
+
+        // Drag and drop functionality
+        const chatArea = document.querySelector('.flex-1.flex.flex-col');
+
+        chatArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.add('dragover');
+        });
+
+        chatArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.remove('dragover');
+        });        chatArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.remove('dragover');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleImageUpload(files);
+            }
+        });
+
+        // Voice recording variables
+        let mediaRecorder;
+        let audioChunks = [];
+        let recordingStartTime;
+
+        function startVoiceRecording() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        sampleRate: 44100
+                    }
+                })
+                .then(stream => {
+                    isRecording = true;
+                    audioChunks = [];
+                    recordingStartTime = Date.now();
+
+                    // Store stream reference to stop it later
+                    window.currentStream = stream;
+
+                    // Create MediaRecorder with specific options
+                    const options = {
+                        mimeType: 'audio/webm;codecs=opus'
+                    };
+
+                    // Fallback for browsers that don't support webm
+                    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                        options.mimeType = 'audio/mp4';
+                        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                            options.mimeType = 'audio/wav';
+                            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                                delete options.mimeType;
+                            }
+                        }
+                    }
+
+                    mediaRecorder = new MediaRecorder(stream, options);
+
+                    mediaRecorder.addEventListener('dataavailable', event => {
+                        if (event.data.size > 0) {
+                            audioChunks.push(event.data);
+                        }
+                    });
+
+                    mediaRecorder.addEventListener('stop', () => {
+                        const recordingDuration = Date.now() - recordingStartTime;
+                        console.log('Recording duration:', recordingDuration, 'ms');
+                        console.log('Audio chunks:', audioChunks.length);
+
+                        if (audioChunks.length > 0 && recordingDuration > 500) { // Minimum 500ms recording
+                            const mimeType = mediaRecorder.mimeType || 'audio/wav';
+                            const audioBlob = new Blob(audioChunks, { type: mimeType });
+                            console.log('Audio blob size:', audioBlob.size, 'bytes');
+
+                            if (audioBlob.size > 0) {
+                                uploadVoiceMessage(audioBlob);
+                            } else {
+                                alert('Recording failed: No audio data captured');
+                            }
+                        } else {
+                            alert('Recording too short. Please record for at least 1 second.');
+                        }
+
+                        // Clean up
+                        if (window.currentStream) {
+                            window.currentStream.getTracks().forEach(track => track.stop());
+                            window.currentStream = null;
+                        }
+                    });
+
+                    // Start recording
+                    mediaRecorder.start(100); // Collect data every 100ms
+
+                    document.getElementById('voiceRecording').classList.remove('hidden');
+                    document.getElementById('voiceButton').classList.add('text-red-400');
+
+                    console.log('Recording started...');
+                })
+                .catch(error => {
+                    console.error('Error accessing microphone:', error);
+                    isRecording = false;
+                    alert('Could not access microphone. Please check permissions and try again.');
+                });
+            } else {
+                alert('Voice recording is not supported in this browser.');
+            }
+        }
+
+        function stopVoiceRecording() {
+            if (isRecording && mediaRecorder && mediaRecorder.state === 'recording') {
+                console.log('Stopping recording...');
+                isRecording = false;
+                mediaRecorder.stop();
+
+                document.getElementById('voiceRecording').classList.add('hidden');
+                document.getElementById('voiceButton').classList.remove('text-red-400');
+            }
+        }
+
+        function uploadVoiceMessage(audioBlob) {
+            const formData = new FormData();
+
+            // Determine file extension based on blob type
+            let fileExtension = 'wav';
+            if (audioBlob.type.includes('webm')) {
+                fileExtension = 'webm';
+            } else if (audioBlob.type.includes('mp4')) {
+                fileExtension = 'mp4';
+            } else if (audioBlob.type.includes('ogg')) {
+                fileExtension = 'ogg';
+            }
+
+            const fileName = `voice_${Date.now()}.${fileExtension}`;
+            formData.append('voice', audioBlob, fileName);
+            formData.append('conversation_id', '{{ conversation_id }}');
+
+            // Show uploading indicator
+            const messagesContainer = document.getElementById('messagesContainer');
+            const uploadingDiv = document.createElement('div');
+            uploadingDiv.className = 'flex items-start space-x-3 justify-end uploading-message';
+            uploadingDiv.innerHTML = `
+                <div class="max-w-xs lg:max-w-md">
+                    <div class="message-sent rounded-2xl rounded-tr-md p-3">
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-spinner fa-spin text-white"></i>
+                            <span class="text-white text-sm">Sending voice message...</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            messagesContainer.appendChild(uploadingDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            fetch('{{ url_for("upload_voice") }}', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove uploading indicator
+                uploadingDiv.remove();
+
+                if (data.success) {
+                    addFileMessageToUI(data.message, true);
+                } else {
+                    console.error('Failed to upload voice message:', data.error);
+                    alert('Failed to send voice message: ' + data.error);
+                }
+            })
+            .catch(error => {
+                // Remove uploading indicator
+                uploadingDiv.remove();
+                console.error('Error uploading voice message:', error);
+                alert('Error sending voice message. Please try again.');
+            });
+        }
+
+        // Audio playback functions
+        function toggleAudio(messageId) {
+            const audio = document.getElementById(`audio-${messageId}`);
+            const playIcon = document.getElementById(`play-icon-${messageId}`);
+            const progressBar = document.getElementById(`progress-${messageId}`);
+            const durationSpan = document.getElementById(`duration-${messageId}`);
+
+            if (audio.paused) {
+                // Stop all other audio
+                document.querySelectorAll('audio').forEach(a => {
+                    if (a !== audio) {
+                        a.pause();
+                        a.currentTime = 0;
+                    }
+                });
+
+                // Reset all play icons
+                document.querySelectorAll('[id^="play-icon-"]').forEach(icon => {
+                    icon.className = 'fas fa-play text-white text-sm';
+                });
+
+                audio.play();
+                playIcon.className = 'fas fa-pause text-white text-sm';
+            } else {
+                audio.pause();
+                playIcon.className = 'fas fa-play text-white text-sm';
+            }
+
+            audio.addEventListener('timeupdate', () => {
+                const progress = (audio.currentTime / audio.duration) * 100;
+                progressBar.style.width = progress + '%';
+
+                const minutes = Math.floor(audio.currentTime / 60);
+                const seconds = Math.floor(audio.currentTime % 60);
+                durationSpan.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            });
+
+            audio.addEventListener('ended', () => {
+                playIcon.className = 'fas fa-play text-white text-sm';
+                progressBar.style.width = '0%';
+                durationSpan.textContent = '0:00';
+            });
+        }
+
+        // Media interaction functions
+        function openImageModal(imageSrc, imageName) {
+            // Create modal
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50';
+            
+            // Calculate maximum size based on viewport dimensions
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const maxWidth = Math.min(viewportWidth * 0.9, 1200); // 90% of viewport width up to 1200px
+            const maxHeight = viewportHeight * 0.9; // 90% of viewport height
+            
+            modal.innerHTML = `
+                <div class="relative" style="max-width: ${maxWidth}px; max-height: ${maxHeight}px;">
+                    <img src="${imageSrc}" 
+                         alt="${imageName}" 
+                         class="rounded-lg shadow-2xl object-contain"
+                         style="max-width: 100%; max-height: ${maxHeight}px; min-height: 200px;">
+                    <button onclick="this.closest('.fixed').remove()" 
+                            class="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full w-10 h-10 flex items-center justify-center hover:bg-opacity-75 transition duration-300">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <div class="absolute bottom-4 left-4 text-white bg-black bg-opacity-50 px-4 py-2 rounded-lg backdrop-blur-sm">
+                        <p class="text-sm font-medium">${imageName}</p>
+                    </div>
+                </div>
+            `;
+            
+            // Add click anywhere to close
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+            
+            document.body.appendChild(modal);
+        }
+
+        function openVideoModal(videoSrc, videoName) {
+            // Create modal
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="max-w-4xl max-h-full p-4">
+                    <div class="relative">
+                        <video controls class="max-w-full max-h-full">
+                            <source src="${videoSrc}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        <button onclick="this.closest('.fixed').remove()" class="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full w-10 h-10 flex items-center justify-center hover:bg-opacity-75">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        <div class="absolute bottom-4 left-4 text-white bg-black bg-opacity-50 px-3 py-1 rounded">
+                            ${videoName}
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function playAudio(audioSrc) {
+            const audio = new Audio(audioSrc);
+            audio.play();
+        }
+
+        function downloadFile(fileSrc, fileName) {
+            const link = document.createElement('a');
+            link.href = fileSrc;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function showAllMedia() {
+            // This could open a modal with all media files
+            alert('Show all media functionality - to be implemented');
+        }
+
+        // Delete message functionality
+        function confirmDeleteMessage(messageId) {
+            // Create a custom modal for deletion confirmation
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="glass-effect p-6 rounded-xl max-w-sm w-full mx-4">
+                    <h3 class="text-white font-bold text-lg mb-4">Delete Message</h3>
+                    <p class="text-gray-300 mb-6">Are you sure you want to delete this message? This action cannot be undone.</p>
+                    <div class="flex justify-end space-x-3">
+                        <button onclick="this.closest('.fixed').remove()" 
+                                class="px-4 py-2 text-gray-300 hover:text-white transition duration-300">
+                            Cancel
+                        </button>
+                        <button onclick="deleteMessage('${messageId}', this)" 
+                                class="px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition duration-300">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }        function deleteMessage(messageId, button) {
+            if (button) {
+                const originalText = button.textContent;
+                button.textContent = 'Deleting...';
+                button.disabled = true;
+            }
+
+            fetch('{{ url_for("delete_message") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message_id: messageId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const messageContainer = document.querySelector(`[data-message-id="${messageId}"]`).closest('.flex.items-start.space-x-3');
+                    
+                    if (messageContainer) {
+                        // Fade out animation
+                        messageContainer.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                        messageContainer.style.opacity = '0';
+                        messageContainer.style.transform = 'translateX(20px)';
+                        
+                        setTimeout(() => {
+                            messageContainer.remove();
+                            
+                            // Check if this was the last message
+                            if (document.querySelectorAll('.flex.items-start.space-x-3').length === 0) {
+                                // Show the "no messages" state
+                                const noMessages = document.createElement('div');
+                                noMessages.className = 'text-center py-8';
+                                noMessages.innerHTML = `
+                                    <div class="w-16 h-16 bg-purple-600/20 rounded-full mx-auto mb-4 flex items-center justify-center">
+                                        <i class="fas fa-comments text-purple-400 text-2xl"></i>
+                                    </div>
+                                    <h3 class="text-white font-semibold mb-2">No messages yet</h3>
+                                    <p class="text-gray-400 text-sm">Start the conversation by sending a message below</p>
+                                `;
+                                document.getElementById('messagesContainer').appendChild(noMessages);
+                            }
+                        }, 300);
+                    }
+                    
+                    // Remove the confirmation modal
+                    const modal = document.querySelector('.fixed.inset-0');
+                    if (modal) {
+                        modal.style.opacity = '0';
+                        setTimeout(() => modal.remove(), 300);
+                    }
+                } else {
+                    console.error('Failed to delete message:', data.error);
+                    const error = data.error || 'Please try again.';
+                    alert('Failed to delete message: ' + error);
+                    if (button) {
+                        button.textContent = originalText;
+                        button.disabled = false;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting message:', error);
+                alert('Error deleting message. Please try again.');
+                if (button) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                }
+            });
+        }
+
+        window.addEventListener('load', function() {
+            const messagesContainer = document.getElementById('messagesContainer');
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        });
+    </script>
+</body>
+</html>

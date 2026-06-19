@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home - ChatFlow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e293b 100%);
+        }
+        .glass-effect {
+            backdrop-filter: blur(16px);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .chat-item:hover {
+            background: rgba(139, 92, 246, 0.1);
+            transform: translateX(8px);
+        }
+        .online-dot {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .sidebar-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .sidebar-scroll::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .sidebar-scroll::-webkit-scrollbar-thumb {
+            background: rgba(139, 92, 246, 0.5);
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="w-80 glass-effect border-r border-purple-500/20 flex flex-col">
+            <!-- Header -->
+            <div class="p-6 border-b border-purple-500/20">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-comments text-white text-xl"></i>
+                        </div>
+                        <span class="text-white font-bold text-xl">ChatFlow</span>
+                    </div>
+                    <button class="text-gray-300 hover:text-white transition duration-300" onclick="toggleProfile()">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                </div>
+
+                <!-- Search Bar -->
+                <div class="relative">
+                    <input
+                        type="text"
+                        placeholder="Search conversations..."
+                        class="w-full bg-white/10 text-white placeholder-gray-300 px-4 py-3 pl-12 rounded-xl focus:bg-white/20 focus:outline-none focus:ring-2 focus:ring-purple-500 transition duration-300"
+                    >
+                    <i class="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-300"></i>
+                </div>
+
+                <!-- New Chat Button -->
+                <button onclick="showNewChatModal()" class="w-full mt-4 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-semibold transition duration-300 flex items-center justify-center space-x-2">
+                    <i class="fas fa-plus"></i>
+                    <span>New Chat</span>
+                </button>
+            </div>
+
+            <!-- Chat List -->
+            <div class="flex-1 overflow-y-auto sidebar-scroll">
+                <div class="p-4 space-y-2">
+                    {% if conversations %}
+                        {% for conversation in conversations %}
+                            <div class="chat-item p-4 rounded-xl cursor-pointer transition-all duration-300 hover:bg-white/5 {% if loop.first %}bg-purple-600/20 border border-purple-500/30{% endif %}" onclick="openChat('{{ conversation.id }}')" data-conversation-id="{{ conversation.id }}">
+                                <div class="flex items-center space-x-3">
+                                    <div class="relative">
+                                        <div class="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                                            <span class="text-white font-semibold text-sm">{{ conversation.other_user.name[0].upper() }}</span>
+                                        </div>
+                                        <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-gray-800 online-dot"></div>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center justify-between">
+                                            <h3 class="text-white font-semibold truncate">{{ conversation.other_user.name }}</h3>
+                                            <span class="text-xs text-gray-300">
+                                                {% if conversation.last_message_time %}
+                                                    {{ moment(conversation.last_message_time).fromNow() if moment else 'now' }}
+                                                {% else %}
+                                                    now
+                                                {% endif %}
+                                            </span>
+                                        </div>
+                                        <p class="text-gray-300 text-sm truncate">
+                                            {{ conversation.last_message if conversation.last_message else 'Start a conversation...' }}
+                                        </p>
+                                    </div>
+                                    {% if conversation.unread_count > 0 %}
+                                        <div class="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
+                                            <span class="text-white text-xs font-bold">{{ conversation.unread_count }}</span>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-8">
+                            <div class="w-16 h-16 bg-purple-600/20 rounded-full mx-auto mb-4 flex items-center justify-center">
+                                <i class="fas fa-comments text-purple-400 text-2xl"></i>
+                            </div>
+                            <h3 class="text-white font-semibold mb-2">No conversations yet</h3>
+                            <p class="text-gray-400 text-sm mb-4">Start a new conversation to begin chatting</p>
+                            <button onclick="showNewChatModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm transition duration-300">
+                                Start New Chat
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- User Profile -->
+            <div class="p-4 border-t border-purple-500/20">
+                <div class="flex items-center space-x-3">
+                    <div class="relative">
+                        <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=40&h=40&fit=crop&crop=face"
+                             alt="You" class="w-10 h-10 rounded-full object-cover">
+                        <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-gray-800 online-dot"></div>
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="text-white font-semibold">{{ user.username if user else 'You' }}</h3>
+                        <p class="text-gray-300 text-sm">Online</p>
+                    </div>
+                    <button class="text-gray-300 hover:text-white transition duration-300" onclick="logout()">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex items-center justify-center">
+            <div class="text-center max-w-md">
+                <div class="w-24 h-24 bg-purple-600/20 rounded-3xl mx-auto mb-6 flex items-center justify-center">
+                    <i class="fas fa-comments text-purple-400 text-4xl"></i>
+                </div>
+                <h2 class="text-3xl font-bold text-white mb-4">Welcome to ChatFlow, {{ user.username }}!</h2>
+                <p class="text-gray-300 mb-8">Select a conversation to start chatting, or create a new one to connect with friends and colleagues.</p>
+                <button onclick="showNewChatModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition duration-300 flex items-center space-x-2 mx-auto">
+                    <i class="fas fa-plus"></i>
+                    <span>Start New Chat</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Dropdown -->
+    <div id="profileDropdown" class="fixed top-20 right-6 w-64 glass-effect rounded-xl shadow-2xl border border-purple-500/20 hidden z-50">
+        <div class="p-4">
+            <div class="flex items-center space-x-3 mb-4">
+                <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=40&h=40&fit=crop&crop=face"
+                     alt="You" class="w-10 h-10 rounded-full object-cover">
+                <div>
+                    <h3 class="text-white font-semibold">{{ user.username if user else 'User' }}</h3>
+                    <p class="text-gray-300 text-sm">{{ user.email if user else 'user@example.com' }}</p>
+                </div>
+            </div>
+            <div class="space-y-2">
+                <button class="w-full text-left px-3 py-2 text-white hover:bg-white/10 rounded-lg transition duration-300 flex items-center space-x-2">
+                    <i class="fas fa-user w-4"></i>
+                    <span>Profile Settings</span>
+                </button>
+                <button class="w-full text-left px-3 py-2 text-white hover:bg-white/10 rounded-lg transition duration-300 flex items-center space-x-2">
+                    <i class="fas fa-cog w-4"></i>
+                    <span>Preferences</span>
+                </button>
+                <button class="w-full text-left px-3 py-2 text-white hover:bg-white/10 rounded-lg transition duration-300 flex items-center space-x-2">
+                    <i class="fas fa-moon w-4"></i>
+                    <span>Dark Mode</span>
+                </button>
+                <hr class="border-purple-500/20 my-2">
+                <button onclick="logout()" class="w-full text-left px-3 py-2 text-red-400 hover:bg-red-500/10 rounded-lg transition duration-300 flex items-center space-x-2">
+                    <i class="fas fa-sign-out-alt w-4"></i>
+                    <span>Sign Out</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Chat Modal -->
+    <div id="newChatModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="glass-effect p-6 rounded-2xl max-w-md w-full mx-4">
+            <h3 class="text-white font-bold text-xl mb-4">Start New Conversation</h3>
+            <form id="newChatForm">
+                <div class="mb-4">
+                    <label for="userEmail" class="block text-white text-sm font-semibold mb-2">User Email</label>
+                    <input
+                        type="email"
+                        id="userEmail"
+                        name="email"
+                        placeholder="Enter user's email address"
+                        class="w-full bg-white/10 text-white placeholder-gray-300 px-4 py-3 rounded-xl focus:bg-white/20 focus:outline-none focus:ring-2 focus:ring-purple-500 transition duration-300"
+                        required
+                    >
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="hideNewChatModal()" class="px-4 py-2 text-gray-300 hover:text-white transition duration-300">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition duration-300">
+                        Start Chat
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openChat(chatId) {
+            console.log('Opening chat:', chatId);
+            console.log('Chat URL:', `{{ url_for('chat') }}?id=${chatId}`);
+
+            // Validate chatId
+            if (!chatId || chatId === 'undefined' || chatId === 'null') {
+                console.error('Invalid chat ID:', chatId);
+                alert('Invalid conversation ID. Please try again.');
+                return;
+            }
+
+            window.location.href = `{{ url_for('chat') }}?id=${chatId}`;
+        }
+
+        function toggleProfile() {
+            const dropdown = document.getElementById('profileDropdown');
+            dropdown.classList.toggle('hidden');
+        }
+
+        function logout() {
+            if (confirm('Are you sure you want to sign out?')) {
+                window.location.href = '{{ url_for("logout") }}';
+            }
+        }
+
+        function showNewChatModal() {
+            document.getElementById('newChatModal').classList.remove('hidden');
+            document.getElementById('userEmail').focus();
+        }
+
+        function hideNewChatModal() {
+            document.getElementById('newChatModal').classList.add('hidden');
+            document.getElementById('newChatForm').reset();
+        }
+
+        // Handle new chat form submission
+        document.getElementById('newChatForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const email = document.getElementById('userEmail').value.trim();
+            if (!email) return;
+
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.textContent = 'Creating...';
+            submitBtn.disabled = true;
+
+            fetch('{{ url_for("create_conversation_api") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email: email })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = data.redirect;
+                } else {
+                    alert(data.error || 'Failed to create conversation');
+                    submitBtn.textContent = originalText;
+                    submitBtn.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+                submitBtn.textContent = originalText;
+                submitBtn.disabled = false;
+            });
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            const dropdown = document.getElementById('profileDropdown');
+            const profileBtn = e.target.closest('button');
+
+            if (!dropdown.contains(e.target) && profileBtn !== document.querySelector('[onclick="toggleProfile()"]')) {
+                dropdown.classList.add('hidden');
+            }
+        });
+
+        // Simulate real-time updates
+        setInterval(() => {
+            const onlineDots = document.querySelectorAll('.online-dot');
+            onlineDots.forEach(dot => {
+                dot.style.animation = 'none';
+                setTimeout(() => {
+                    dot.style.animation = 'pulse 2s infinite';
+                }, 10);
+            });
+        }, 10000);
+    </script>
+</body>
+</html>
